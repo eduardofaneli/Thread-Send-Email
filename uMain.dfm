@@ -1,9 +1,9 @@
 object frmMain: TfrmMain
   Left = 284
   Top = 172
-  Width = 525
-  Height = 640
   Caption = 'SendMail'
+  ClientHeight = 601
+  ClientWidth = 548
   Color = clWindow
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -16,11 +16,12 @@ object frmMain: TfrmMain
   object GroupBox1: TGroupBox
     Left = 0
     Top = 0
-    Width = 509
+    Width = 548
     Height = 153
     Align = alTop
     Caption = 'Login'
     TabOrder = 0
+    ExplicitWidth = 509
     object Username: TLabel
       Left = 16
       Top = 16
@@ -29,22 +30,22 @@ object frmMain: TfrmMain
       Caption = 'Username'
     end
     object Password: TLabel
-      Left = 16
-      Top = 56
+      Left = 15
+      Top = 57
       Width = 50
       Height = 14
       Caption = 'Password'
     end
     object Label1: TLabel
       Left = 16
-      Top = 96
+      Top = 98
       Width = 22
       Height = 14
       Caption = 'Host'
     end
     object Label2: TLabel
       Left = 304
-      Top = 96
+      Top = 98
       Width = 19
       Height = 14
       Caption = 'Port'
@@ -55,6 +56,7 @@ object frmMain: TfrmMain
       Width = 281
       Height = 22
       TabOrder = 0
+      Text = 'noreply@amaggi.com.br'
     end
     object edtPassword: TEdit
       Left = 16
@@ -63,6 +65,7 @@ object frmMain: TfrmMain
       Height = 22
       PasswordChar = '*'
       TabOrder = 1
+      Text = 'e4UkoLrQG@'
     end
     object edtHost: TEdit
       Left = 16
@@ -70,7 +73,7 @@ object frmMain: TfrmMain
       Width = 281
       Height = 22
       TabOrder = 2
-      Text = 'smtp.gmail.com'
+      Text = 'smtp.office365.com'
     end
     object edtPort: TEdit
       Left = 304
@@ -78,17 +81,45 @@ object frmMain: TfrmMain
       Width = 50
       Height = 22
       TabOrder = 3
-      Text = '465'
+      Text = '587'
+    end
+    object rgEncryptionType: TRadioGroup
+      Left = 303
+      Top = 21
+      Width = 220
+      Height = 33
+      Caption = 'Encryption Type'
+      Columns = 2
+      ItemIndex = 1
+      Items.Strings = (
+        'taSSL'
+        'taTLS')
+      TabOrder = 4
+    end
+    object rgSMTPAuthentication: TRadioGroup
+      Left = 303
+      Top = 57
+      Width = 220
+      Height = 37
+      Caption = 'SMTP Authentication'
+      Columns = 3
+      ItemIndex = 1
+      Items.Strings = (
+        'satNone'
+        'satDefault'
+        'satSASL')
+      TabOrder = 5
     end
   end
   object GroupBox2: TGroupBox
     Left = 0
     Top = 153
-    Width = 509
+    Width = 548
     Height = 139
     Align = alTop
     Caption = 'Header'
     TabOrder = 1
+    ExplicitWidth = 509
     object Label3: TLabel
       Left = 16
       Top = 16
@@ -311,30 +342,32 @@ object frmMain: TfrmMain
       Width = 481
       Height = 22
       TabOrder = 0
+      Text = 'eduardo.faneli@amaggi.com.br;ti.sigam@amaggi.com.br'
     end
     object edtSubject: TEdit
       Left = 16
       Top = 72
       Width = 481
       Height = 22
-      PasswordChar = '*'
       TabOrder = 1
+      Text = '[ Teste ] - Teste de Servidor de Email'
     end
   end
   object Panel1: TPanel
     Left = 0
     Top = 292
-    Width = 509
+    Width = 548
     Height = 41
     Align = alTop
     TabOrder = 2
+    ExplicitWidth = 509
     DesignSize = (
-      509
+      548
       41)
     object btnSendEmail: TSpeedButton
       Left = 3
       Top = 0
-      Width = 41
+      Width = 80
       Height = 40
       Hint = 'Send Email'
       Anchors = [akLeft, akTop, akRight, akBottom]
@@ -454,24 +487,34 @@ object frmMain: TfrmMain
       ParentShowHint = False
       ShowHint = True
       OnClick = btnSendEmailClick
+      ExplicitWidth = 41
     end
   end
   object GroupBox3: TGroupBox
     Left = 0
     Top = 333
-    Width = 509
-    Height = 269
+    Width = 548
+    Height = 268
     Align = alClient
     Caption = 'Body'
     TabOrder = 3
+    ExplicitWidth = 509
     object reBody: TRichEdit
       Left = 2
       Top = 16
-      Width = 505
-      Height = 251
+      Width = 544
+      Height = 250
       Align = alClient
+      Font.Charset = ANSI_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -11
+      Font.Name = 'Arial'
+      Font.Style = []
+      ParentFont = False
       ScrollBars = ssVertical
       TabOrder = 0
+      Zoom = 100
+      ExplicitWidth = 505
     end
   end
   object odAttchment: TOpenDialog

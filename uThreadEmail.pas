@@ -4,137 +4,341 @@ interface
 
 uses
   Classes, IdMessage, IdBaseComponent, IdComponent, IdTCPConnection, IdTCPClient,
-  IdMessageClient, IdSMTP, IBCustomDataSet, IBQuery, IBDatabase,
-  IdIOHandler, IdIOHandlerSocket, IdSSLOpenSSL;
+  IdMessageClient, IdSMTP, IBCustomDataSet, IBQuery, IBDatabase, IdIOHandler,
+  IdIOHandlerSocket, IdSSLOpenSSL, IdText;
 
 type
-  TParametrosEmail = class
-  private
-    FPort: Integer;
-    FHost: String;
-    FPassword: String;
-    FUsername: String;
-    FAssunto: String;
-    FRemetente: String;
-    FNomeRemetente: String;
-    FDestinatario: String;
-    FAnexo: String;
-    FCorpo: TStringList;
-  public
-    destructor Destroy; override;
-  published
-    property Host         : String read FHost     write FHost    ;
-    property Port         : Integer read FPort     write FPort    ;
-    property Password     : String read FPassword write FPassword;
-    property Username     : String read FUsername write FUsername;
-    property NomeRemetente  : String read FNomeRemetente write FNomeRemetente;
-    property Remetente    : String read FRemetente write FRemetente;
-    property Destinatario : String read FDestinatario write FDestinatario;
-    property Assunto      : String read FAssunto write FAssunto;
-    property Corpo        : TStringList read FCorpo write FCorpo;
-    property Anexo        : String read FAnexo write FAnexo;
+  TTipoAutenticacao = (taSemAutenticacao = -1, taSSL = 0, taTLS = 1);
 
-  end;
   TThreadEmail = class(TThread)
   private
-    IdSSLIOHandlerSocket: TIdSSLIOHandlerSocket;
-    IdSMTP: TIdSMTP;
-    IdMessage: TIdMessage;
-
-    procedure EnviarEmail();
+    FEmail: string;
+    FServidor: string;
+    FUsuario: string;
+    FSenha: string;
+    FPorta: Integer;
+    FAssunto: string;
+    FConteudo: string;
+    FAnexos: TStrings;
+    FTipoAutenticacao: TTipoAutenticacao;
+    FTipoAutenticacaoSMTP: TIdSMTPAuthenticationType;
+    FSSL: TIdSSLIOHandlerSocketOpenSSL;
+    FSmtp: TIdSMTP;
+    FMensagem: TIdMessage;
+    FTexto: TIdText;
+    FDestinatarios: TStrings;
+    FDestinatariosCC: TStrings;
+    FDestinatariosCCO: TStrings;
+    FContentType: string;
+    FCharSet: string;
+    FLog: TStrings;
+    procedure configurar();
+    procedure carregarDestinatarios();
     { Private declarations }
   protected
-    FParametros: TParametrosEmail;
     procedure Execute; override;
   public
-    constructor Create(AParametros: TParametrosEmail);
+    constructor Create();
     destructor Destroy; override;
+    function adicionarDestinatario(const pEmail: string): TThreadEmail;
+    function adicionarDestinatarioCopia(const pEmail: string): TThreadEmail;
+    function adicionarDestinatarioCopiaOculta(const pEmail: string): TThreadEmail;
+    function adicionarAnexos(const pAnexo: string): TThreadEmail;
+    function definirConteudo(const pAssunto, pConteudo: string; pAnexos: TStrings = nil): TThreadEmail;
+    function definirDadosAutenticacao(pEmail, pServidor, pUsuario, pSenha: string; pPorta: Integer; pTipoAutenticacao: TTipoAutenticacao; pTipoAutenticacaoSMTP: TIdSMTPAuthenticationType = satDefault): TThreadEmail;
+    function defineContentType(const ContentType: string): TThreadEmail;
+    function defineCharSet(const CharSet: string = 'ISO-8859-1'): TThreadEmail;
+    function getLog(): string;
+    class function new(): TThreadEmail;
   end;
 
 implementation
 
-uses SysUtils;
+uses
+  SysUtils, IdExplicitTLSClientServerBase, IdAttachmentFile, System.StrUtils;
 
 { TThreadEmail }
 
-constructor TThreadEmail.Create(AParametros: TParametrosEmail);
+function TThreadEmail.adicionarAnexos(const pAnexo: string): TThreadEmail;
+begin
+  Result := Self;
+  if not Assigned(FAnexos) then
+    FAnexos := TStringList.Create;
+
+  FAnexos.Add(pAnexo);
+end;
+
+function TThreadEmail.adicionarDestinatario(const pEmail: string): TThreadEmail;
+begin
+  Result := Self;
+  FDestinatarios.Add(pEmail);
+end;
+
+function TThreadEmail.adicionarDestinatarioCopia(const pEmail: string): TThreadEmail;
+begin
+  Result := Self;
+  FDestinatariosCC.Add(pEmail);
+end;
+
+function TThreadEmail.adicionarDestinatarioCopiaOculta(const pEmail: string): TThreadEmail;
+begin
+  Result := Self;
+  FDestinatariosCCO.Add(pEmail);
+end;
+
+procedure TThreadEmail.carregarDestinatarios;
+var
+  destinatario, email: string;
+  contador: Integer;
+begin
+  contador := 0;
+  FMensagem.Recipients.clear;
+
+  if FDestinatarios.Count = 1 then
+  begin
+    for email in SplitString(FDestinatarios.Text, ';') do
+    begin
+      if Length(email) <> 0 then
+      begin
+        FMensagem.Recipients.Add;
+        FMensagem.Recipients.Items[contador].Address := email.Trim();
+        Inc(contador);
+      end;
+    end;
+  end
+  else
+  begin
+    for destinatario in FDestinatarios do
+    begin
+      FMensagem.Recipients.Add;
+      FMensagem.Recipients.Items[contador].Address := destinatario;
+      Inc(contador);
+    end;
+  end;
+
+  contador := 0;
+  FMensagem.CCList.clear;
+  for destinatario in FDestinatariosCC do
+  begin
+    FMensagem.CCList.Add;
+    FMensagem.CCList.Items[contador].Address := destinatario;
+    Inc(contador);
+  end;
+
+  contador := 0;
+  FMensagem.BccList.Clear;
+  for destinatario in FDestinatariosCCO do
+  begin
+    FMensagem.BccList.Add;
+    FMensagem.BccList.Items[contador].Address := destinatario;
+    Inc(contador);
+  end;
+end;
+
+procedure TThreadEmail.configurar;
+begin
+  FSmtp.Host := FServidor;
+  FSmtp.Port := FPorta;
+  FSmtp.Username := FUsuario;
+  FSmtp.Password := FSenha;
+  FSmtp.AuthType := FTipoAutenticacaoSMTP;
+
+  case FTipoAutenticacao of
+    taSSL:
+      begin
+        FSSL.SSLOptions.Method := sslvSSLv23;
+        FSSL.SSLOptions.Mode := sslmUnassigned;
+        FSmtp.IOHandler := FSSL;
+      end;
+    taTLS:
+      begin
+        FSSL.SSLOptions.Method := sslvTLSv1;
+        FSmtp.IOHandler := FSSL;
+        FSmtp.UseTLS := utUseExplicitTLS;
+      end;
+  end;
+end;
+
+constructor TThreadEmail.Create();
 begin
   inherited Create(False);
   FreeOnTerminate := True;
 
-  IdSSLIOHandlerSocket := TIdSSLIOHandlerSocket.Create(nil);
-  IdSMTP := TIdSMTP.Create(nil);
-  IdMessage := TIdMessage.Create(nil);
+  FContentType := 'text/html';
+  FCharSet := 'ISO-8859-1';
+  FDestinatarios := TStringList.create;
+  FDestinatariosCC := TStringList.Create;
+  FDestinatariosCCO := TStringList.Create;
+  FLog := TStringList.Create;
 
-  FParametros := AParametros;
+  FSSL := TIdSSLIOHandlerSocketOpenSSL.create(nil);
+  FSmtp := TIdSMTP.create(nil);
+  FMensagem := TIdMessage.create(nil);
+
+  FSmtp.AuthType := TIdSMTPAuthenticationType.satDefault;
+  FSmtp.UseTLS := utNoTLSSupport;
+  FSSL.SSLOptions.Mode := IdSSLOpenSSL.sslmClient;
+end;
+
+function TThreadEmail.defineCharSet(const CharSet: string): TThreadEmail;
+begin
+  Result := Self;
+  FCharSet := CharSet;
+end;
+
+function TThreadEmail.defineContentType(const ContentType: string): TThreadEmail;
+begin
+  Result := Self;
+  FContentType :=  IfThen(ContentType = EmptyStr, 'text/html', ContentType);
+end;
+
+function TThreadEmail.definirConteudo(const pAssunto, pConteudo: string; pAnexos: TStrings): TThreadEmail;
+begin
+  FAssunto := pAssunto;
+  FConteudo := pConteudo;
+  FAnexos := pAnexos;
+
+  Result := Self;
+end;
+
+function TThreadEmail.definirDadosAutenticacao(pEmail, pServidor, pUsuario, pSenha: string; pPorta: Integer; pTipoAutenticacao: TTipoAutenticacao; pTipoAutenticacaoSMTP: TIdSMTPAuthenticationType): TThreadEmail;
+begin
+  FEmail := pEmail;
+  FServidor := pServidor;
+  FUsuario := pUsuario;
+  FSenha := pSenha;
+  FPorta := pPorta;
+  FTipoAutenticacao := pTipoAutenticacao;
+  FTipoAutenticacaoSMTP := pTipoAutenticacaoSMTP;
+
+  Result := Self;
 end;
 
 destructor TThreadEmail.Destroy;
 begin
-  FreeAndNil(FParametros);
-  FreeAndNil(IdSSLIOHandlerSocket);
-  FreeAndNil(IdSMTP);
-  FreeAndNil(IdMessage);
-  inherited;
-end;
-
-procedure TThreadEmail.EnviarEmail;
-begin
-
-  IdSSLIOHandlerSocket.SSLOptions.Method := sslvSSLv23;
-  IdSSLIOHandlerSocket.SSLOptions.Mode := sslmClient;
-
-  with IdSMTP do
-  begin
-    IOHandler := IdSSLIOHandlerSocket;
-    AuthenticationType := atLogin;
-    Port := FParametros.Port;
-    Host := FParametros.Host;
-    Password := FParametros.Password;
-    Username := FParametros.Username;
-    try
-      Connect;
-    except
-      Connect;
-    end;
-
-    try
-      Authenticate;
-    except
-      Exit;
-    end;
-
-    with IdMessage do
-    begin
-
-      From.Address := FParametros.Remetente;
-      From.Name := FParametros.NomeRemetente;
-      Recipients.Clear;
-      Recipients.Add;
-      Recipients.Items[0].Address := FParametros.Destinatario;
-      Subject := FParametros.Assunto;
-      Body := FParametros.Corpo;
-      if FParametros.Anexo <> EmptyStr then
-        TIdAttachment.Create(MessageParts, FParametros.Anexo);
-
-    end;
-    Send(IdMessage);
-    Disconnect;
+  try
+    if (Assigned(FLog)) then
+      FreeAndNil(FLog);
+  except
   end;
+
+  try
+    if (Assigned(FAnexos)) then
+      FreeAndNil(FAnexos);
+  except
+  end;
+
+  try
+    FreeAndNil(FDestinatarios);
+  except
+  end;
+
+  try
+    FreeAndNil(FDestinatariosCC);
+  except
+  end;
+
+  try
+    FreeAndNil(FDestinatariosCCO);
+  except
+  end;
+
+  try
+    FreeAndNil(FTexto);
+  except
+  end;
+
+  try
+    if FSmtp.Connected then
+      FSmtp.Disconnect(TRUE);
+  except
+  end;
+
+  try
+    UnLoadOpenSSLLibrary();
+  except
+  end;
+
+  try
+    if Assigned(FSSL) then
+      FreeAndNil(FSSL);
+  except
+  end;
+
+  try
+    FreeAndNil(FSmtp);
+  except
+  end;
+
+  try
+    FreeAndNil(FMensagem);
+  except
+  end;
+
+  inherited;
 end;
 
 procedure TThreadEmail.Execute;
+var
+  anexo: string;
 begin
-  EnviarEmail();
+  configurar();
+
+  FMensagem.From.Address := FUsuario;
+  FMensagem.From.Name := FEmail;
+  FMensagem.Subject := FAssunto;
+
+  if Assigned(FAnexos) then
+  begin
+    for anexo in FAnexos do
+    begin
+      TIdAttachmentFile.Create(FMensagem.MessageParts, anexo);
+    end;
+  end;
+
+  carregarDestinatarios();
+
+  FTexto := TIdText.create(FMensagem.MessageParts);
+  FTexto.ContentType := FContentType;
+  FTexto.CharSet := FCharSet;
+  FTexto.Body.Text := FConteudo;
+
+  try
+    FSmtp.Connect();
+
+    FSmtp.Authenticate();
+  except
+    on E: Exception do
+    begin
+      E.Message := E.Message + ' > Erro na conexão ou autenticação ';
+      FLog.Add(E.Message);
+//      raise
+    end;
+  end;
+
+  try
+    FSmtp.Send(FMensagem);
+  except
+    on E: Exception do
+    begin
+      E.Message := E.Message + ' > Erro ao enviar email ';
+      FLog.Add(E.Message);
+//      raise
+    end;
+  end;
+
+  FSmtp.Disconnect;
 end;
 
-{ TParametrosEmail }
-
-destructor TParametrosEmail.Destroy;
+function TThreadEmail.getLog: string;
 begin
-  FreeAndNil(FCorpo);
-  inherited;
+  Result := FLog.Text;
+end;
+
+class function TThreadEmail.new: TThreadEmail;
+begin
+  Result := Self.Create;
 end;
 
 end.
- 
+
